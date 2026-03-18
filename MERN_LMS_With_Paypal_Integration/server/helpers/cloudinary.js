@@ -1,35 +1,37 @@
+const path = require("path");
 const cloudinary = require("cloudinary").v2;
 const fs = require("fs");
-const streamifier = require("streamifier");
 
-// Configure with env data
+// Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
-  timeout: 120000, // 2 minutes
+  timeout: 120000,
 });
 
-/**
- * Uploads media to Cloudinary with retry and stream handling
- * @param {string} filePath - Local file path
- * @returns {Promise<Object>} - Cloudinary upload result
- */
+const getResourceType = (filePath) => {
+  const ext = path.extname(filePath).toLowerCase();
+  if ([".mp4", ".mov", ".avi", ".mkv", ".webm"].includes(ext)) return "video";
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"].includes(ext)) return "image";
+  return "auto"; // fallback
+};
+
 const uploadMediaToCloudinary = async (filePath) => {
   const maxRetries = 2;
   let attempt = 0;
+  const resource_type = getResourceType(filePath);
 
   const upload = () =>
     new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { resource_type: "auto", folder: "media" },
+        { resource_type, folder: "media" },
         (error, result) => {
           if (error) return reject(error);
           resolve(result);
         }
       );
 
-      // Read file as stream
       const fileStream = fs.createReadStream(filePath);
       fileStream.on("error", (err) => reject(err));
       fileStream.pipe(uploadStream);
@@ -52,10 +54,6 @@ const uploadMediaToCloudinary = async (filePath) => {
   }
 };
 
-/**
- * Deletes media from Cloudinary
- * @param {string} publicId - Public ID of the media
- */
 const deleteMediaFromCloudinary = async (publicId) => {
   try {
     await cloudinary.uploader.destroy(publicId, { resource_type: "auto" });
